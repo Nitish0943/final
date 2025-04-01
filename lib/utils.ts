@@ -22,7 +22,12 @@ const checkIconExists = async (url: string) => {
   }
 };
 
-export const getTechLogos = async (techArray: string[]) => {
+export const getTechLogos = async (techArray: string[] = []) => {
+  if (!Array.isArray(techArray)) {
+    console.warn("Invalid input: techArray must be an array. Defaulting to an empty array.");
+    techArray = [];
+  }
+
   const logoURLs = techArray.map((tech) => {
     const normalized = normalizeTechName(tech);
     return {
