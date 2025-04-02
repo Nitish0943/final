@@ -4,16 +4,18 @@ import os
 import time
 import base64
 from playsound import playsound
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_socketio import SocketIO
 import threading
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+gaze = None  # Global variable to manage the EyeGaze instance
+
 class EyeGaze:
     alert_sound = "alert.mp3"
-    running = True  # Control variable to stop the process
+    running = False
 
     def get_path(self):
         return os.getcwd()
@@ -51,6 +53,7 @@ class EyeGaze:
         return (cx, cy), pupil_contour, thresh
 
     def detect(self):
+        self.running = True
         eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
         video_capture = cv2.VideoCapture(0)
@@ -59,8 +62,8 @@ class EyeGaze:
             print("Error: Could not open webcam.")
             return
         
-        video_capture.set(3,100)  # Width based on AI Interviewer Card
-        video_capture.set(4, 75)  # Height based on AI Interviewer Card
+        video_capture.set(3, 250)  # Width
+        video_capture.set(4, 125)  # Height
         cheating_attempts = 0
 
         def stream_video():
@@ -89,10 +92,10 @@ class EyeGaze:
                         
                         for (ex, ey, ew, eh) in eyes:
                             eye_region = roi_gray[ey:ey + eh, ex:ex + ew]
-                            pupil_pos, contour, thresh = self.process_eye_region(eye_region)
+                            pupil_pos, _, _ = self.process_eye_region(eye_region)
                             
                             if pupil_pos is not None:
-                                cx, cy = pupil_pos
+                                cx, _ = pupil_pos
                                 if 0.1 * ew < cx < 0.9 * ew:
                                     looking_away = False
                             
@@ -113,26 +116,27 @@ class EyeGaze:
                 else:
                     frame_counter = 0
 
-                cv2.imshow("Eye Tracking", frame)
-                
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    self.running = False
+                if not self.running:
                     break
+            
+            video_capture.release()
+            cv2.destroyAllWindows()
 
         threading.Thread(target=stream_video, daemon=True).start()
         socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
 
-        video_capture.release()
-        cv2.destroyAllWindows()
-
     def stop(self):
         self.running = False
-        cv2.destroyAllWindows()
+        print("Eye tracking stopped.")
+        socketio.stop()
 
-@socketio.on('stop')
-def stop_eye_tracking():
-    gaze.stop()
-    print("Eye tracking stopped.")
+@app.route("/api/stop-python", methods=["POST"])
+def stop_python():
+    global gaze
+    if gaze and gaze.running:
+        gaze.stop()
+        return jsonify({"success": True, "message": "Eye tracking stopped"}), 200
+    return jsonify({"success": False, "error": "No active eye tracking"}), 400
 
 if __name__ == "__main__":
     gaze = EyeGaze()

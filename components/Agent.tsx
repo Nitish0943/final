@@ -132,17 +132,48 @@ const Agent = ({
     }
   };
 
-  const handleDisconnect = () => {
-  setCallStatus(CallStatus.FINISHED);
+  const handleDisconnect = async () => {
+    setCallStatus(CallStatus.FINISHED);
   
-  try {
-    vapi.stop(); // Stop the call
-    console.log("✅ Call disconnected successfully.");
-  } catch (error) {
-    console.error("❌ Error disconnecting call:", error);
-  }
-};
-
+    try {
+      // Stop the Python script with a timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5-second timeout
+  
+      const response = await fetch("/api/stop-python/", { 
+        method: "POST",
+        signal: controller.signal
+      });
+  
+      clearTimeout(timeoutId);
+  
+      if (!response.ok) {
+        throw new Error(`Failed to stop Python script: ${response.statusText}`);
+      }
+  
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(`Python script stop error: ${data.error || "Unknown error"}`);
+      }
+  
+      console.log("✅ Python script stopped successfully.");
+    } catch (error) {
+      if (error.name === "AbortError") {
+        console.error("❌ Error: Python script stop request timed out.");
+      } else {
+        console.error("❌ Error stopping Python script:", error);
+      }
+    }
+  
+    try {
+      vapi.stop(); // Stop the call
+      console.log("✅ Call disconnected successfully.");
+    } catch (error) {
+      console.error("❌ Error disconnecting call:", error);
+    }
+  };
+  
+  
   
   return (
     <>
