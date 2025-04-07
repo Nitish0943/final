@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { vapi } from "@/lib/vapi.sdk";
 import { interviewer } from "@/constants";
 import { createFeedback } from "@/lib/actions/general.action";
-import WebcamStream from "@/components/WebCamStream"; // ✅ Corrected import
+import WebcamStream from "@/components/WebCamStream";
 
 enum CallStatus {
   INACTIVE = "INACTIVE",
@@ -35,11 +35,18 @@ const Agent = ({
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
+  const [runWebcam, setRunWebcam] = useState(false);
 
   useEffect(() => {
     const handleCallEvents = {
-      onCallStart: () => setCallStatus(CallStatus.ACTIVE),
-      onCallEnd: () => setCallStatus(CallStatus.FINISHED),
+      onCallStart: () => {
+        setCallStatus(CallStatus.ACTIVE);
+        setRunWebcam(true);
+      },
+      onCallEnd: () => {
+        setCallStatus(CallStatus.FINISHED);
+        setRunWebcam(false);
+      },
       onMessage: (message: Message) => {
         if (message.type === "transcript" && message.transcriptType === "final") {
           setMessages((prev) => [...prev, { role: message.role, content: message.transcript }]);
@@ -97,25 +104,7 @@ const Agent = ({
 
   const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
-  
-    try {
-      // Call the API to start the Python script
-      const response = await fetch("/api/start-python/", { method: "POST" });
-  
-      if (!response.ok) {
-        throw new Error(`Failed to start Python script: ${response.statusText}`);
-      }
-  
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(`Python script error: ${data.error || "Unknown error"}`);
-      }
-  
-      console.log("✅ Python script started successfully.");
-    } catch (error) {
-      console.error("❌ Error starting Python script:", error);
-    }
-  
+
     try {
       // Start VAPI process
       if (type === "generate") {
@@ -134,37 +123,7 @@ const Agent = ({
 
   const handleDisconnect = async () => {
     setCallStatus(CallStatus.FINISHED);
-  
-    try {
-      // Stop the Python script with a timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5-second timeout
-  
-      const response = await fetch("/api/stop-python/", { 
-        method: "POST",
-        signal: controller.signal
-      });
-  
-      clearTimeout(timeoutId);
-  
-      if (!response.ok) {
-        throw new Error(`Failed to stop Python script: ${response.statusText}`);
-      }
-  
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(`Python script stop error: ${data.error || "Unknown error"}`);
-      }
-  
-      console.log("✅ Python script stopped successfully.");
-    } catch (error) {
-      if (error.name === "AbortError") {
-        console.error("❌ Error: Python script stop request timed out.");
-      } else {
-        console.error("❌ Error stopping Python script:", error);
-      }
-    }
-  
+
     try {
       vapi.stop(); // Stop the call
       console.log("✅ Call disconnected successfully.");
@@ -172,9 +131,7 @@ const Agent = ({
       console.error("❌ Error disconnecting call:", error);
     }
   };
-  
-  
-  
+
   return (
     <>
       <div className="call-view">
@@ -190,7 +147,7 @@ const Agent = ({
         {/* User Profile Card with Live Webcam Stream */}
         <div className="card-border">
           <div className="card-content">
-            <WebcamStream /> {/* ✅ Live Video Feed Instead of Static Image */}
+            <WebcamStream shouldRun={runWebcam} />
           </div>
         </div>
       </div>
