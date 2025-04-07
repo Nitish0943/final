@@ -34,28 +34,60 @@ const WebcamStream = ({ shouldRun }: WebcamStreamProps) => {
             };
             checkReady();
           });
+        } else {
+          console.error("Video element is not available.");
+          return;
         }
 
         if (!modelRef.current) {
           console.log("Loading model...");
-          modelRef.current = await tmImage.load(
-            `${MODEL_URL}model.json`,
-            `${MODEL_URL}metadata.json`
-          );
-          console.log("Model loaded.");
+          try {
+            modelRef.current = await tmImage.load(
+              `${MODEL_URL}model.json`,
+              `${MODEL_URL}metadata.json`
+            );
+            console.log("Model loaded successfully.");
+          } catch (modelError) {
+            console.error("Error loading model:", modelError);
+            return;
+          }
         }
 
         const predictLoop = async () => {
           if (videoRef.current && modelRef.current) {
-            const predictions = await modelRef.current.predict(videoRef.current);
-            console.log("Predictions:", predictions);
+            try {
+              const predictions = await modelRef.current.predict(videoRef.current);
+              console.log("Raw Predictions:", predictions);
 
-            const cheating =
-              predictions.find(p => p.className.toLowerCase().includes("cheat"))?.probability || 0;
-            const notCheating =
-              predictions.find(p => p.className.toLowerCase().includes("not"))?.probability || 0;
+              // Validate predictions
+              if (!predictions || predictions.length === 0) {
+                console.error("No predictions received from the model.");
+                return;
+              }
 
-            setPrediction({ cheating, notCheating });
+              // Map predictions to their respective classes
+              const cheatingPrediction = predictions.find(
+                p => p.className.toLowerCase() === "cheating"
+              );
+              const notCheatingPrediction = predictions.find(
+                p => p.className.toLowerCase() === "not cheating"
+              );
+
+              const cheating = cheatingPrediction ? cheatingPrediction.probability : 0;
+              const notCheating = notCheatingPrediction ? notCheatingPrediction.probability : 0;
+
+              // Log normalized probabilities for debugging
+              console.log("Mapped Predictions:", {
+                cheating: (cheating * 100).toFixed(2),
+                notCheating: (notCheating * 100).toFixed(2),
+              });
+
+              setPrediction({ cheating, notCheating });
+            } catch (predictionError) {
+              console.error("Error during prediction:", predictionError);
+            }
+          } else {
+            console.error("Video element or model is not ready.");
           }
 
           animationRef.current = requestAnimationFrame(predictLoop);
@@ -63,7 +95,7 @@ const WebcamStream = ({ shouldRun }: WebcamStreamProps) => {
 
         predictLoop();
       } catch (err) {
-        console.error("Webcam/model error:", err);
+        console.error("Webcam/model initialization error:", err);
       }
     };
 
